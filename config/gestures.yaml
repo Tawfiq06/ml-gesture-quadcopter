@@ -1,0 +1,4 @@
+UP: increase_altitude
+DOWN: decrease_altitude
+LEFT: yaw_left
+RIGHT: yaw_right
