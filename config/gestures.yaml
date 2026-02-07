@@ -1,4 +1,16 @@
-UP: increase_altitude
 DOWN: decrease_altitude
 LEFT: yaw_left
+MIDDLE:
+  rotation_invariant: true
+OK:
+  rotation_invariant: false
+PEACE:
+  rotation_invariant: false
+POINTER:
+  rotation_invariant: false
 RIGHT: yaw_right
+THUMBS_UP:
+  rotation_invariant: false
+THUMB_UP:
+  rotation_invariant: false
+UP: increase_altitude
