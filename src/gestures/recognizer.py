@@ -2,6 +2,9 @@ import cv2 #used for camera capture and drawing on frames
 import csv #used to save landmark data
 import mediapipe as mp #ml library with pre-trained models
 import numpy as np
+import joblib
+
+from .features import extract_features
 
 #initialze Mediapipe
 from mediapipe.tasks import python
@@ -24,6 +27,9 @@ FINGER_TIPS = [0, 4, 8, 12, 16, 20]
 CRICLE_SCALE = 0.05
 SQUARE_SCALE = 0.08
 
+#ml model
+ml_model_path = "models/gesture_model.pkl"
+
 def distance_px(lm1, lm2, frame_shape):
     h, w, _ = frame_shape
     x1, y1 = int(lm1.x * w), int(lm1.y * h)
@@ -32,7 +38,7 @@ def distance_px(lm1, lm2, frame_shape):
     
 class GestureRecognizer:
     #constructor
-    def __init__(self, model_path: str, csv_path: str = "gesture_data.csv"):
+    def __init__(self, model_path: str, ml_model_path: str, csv_path: str = "gesture_data.csv"):
         #model_path is the path to MediaPipes hand model
         #csv_path is where I want to store the gesture landmarks
 
@@ -44,6 +50,7 @@ class GestureRecognizer:
         )
 
         self.landmarker = HandLandmarker.create_from_options(options) #loads the model
+        self.model = joblib.load(ml_model_path)
         self.csv_path = csv_path #sets the csv path
         
         # Prepare the CSV file
@@ -91,6 +98,19 @@ class GestureRecognizer:
                 top_left = (cx -half_size, cy - half_size)
                 bottom_right = (cx + half_size, cy + half_size)
                 cv2.rectangle(frame, top_left, bottom_right, (0, 0, 255), 2)
+            
+            #ML Recognition
+            features = extract_features(hand, rotation_invariant=True)
+            #need to convert the features into 2D matric with one row
+            X = np.array(features).reshape(1,-1)
+
+            probs = self.model.predict_proba(X)[0]
+            confidence = np.max(probs)
+
+            gesture = None
+            if confidence > 0.6:
+                gesture = self.model.classes_[np.argmax(probs)]
+            '''
             #example detection for now
             wrist = hand[0]
             index_tip = hand[8]
@@ -116,7 +136,7 @@ class GestureRecognizer:
                 gesture =  GESTURE_UP
             elif middle_tip.y > wrist.y + 0.1:
                 gesture =  GESTURE_DOWN
-
+            '''
 
             return gesture, hand
         

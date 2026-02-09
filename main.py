@@ -11,6 +11,7 @@ COUNTDOWN_SECONDS = 3
 
 CONFIG_PATH = "config/gestures.yaml"
 MODEL_PATH = "models/hand_landmarker.task"
+ML_MODEL_PATH = "models/gesture_model.pkl"
 #current modes: IDLE, COUNTDOWN, RECORDING
 
 try:
@@ -23,7 +24,10 @@ def main():
     print("Program started")
 
     cam = Webcam()
-    recognizer = GestureRecognizer(MODEL_PATH)
+    recognizer = GestureRecognizer(
+        model_path=MODEL_PATH,
+        ml_model_path=ML_MODEL_PATH
+    )
 
     timestamp_ms = 0
     

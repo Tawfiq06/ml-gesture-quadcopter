@@ -9,6 +9,8 @@ PEACE:
 POINTER:
   rotation_invariant: false
 RIGHT: yaw_right
+THUMBS_DOWN:
+  rotation_invariant: false
 THUMBS_UP:
   rotation_invariant: false
 THUMB_UP:
