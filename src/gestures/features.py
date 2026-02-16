@@ -44,7 +44,7 @@ def angle(a, b, c):
     return np.degrees(np.arccos(np.clip(cosine, -1.0, 1.0)))
 
 #used to determine the features of the hand
-def extract_features(hand_landmarks, rotation_invariant=False):
+def extract_features(hand_landmarks, Rotation_Independent=False):
     # handle both MediaPipe object or plain list
     if hasattr(hand_landmarks, "landmark"):
         lm = hand_landmarks.landmark
@@ -58,7 +58,7 @@ def extract_features(hand_landmarks, rotation_invariant=False):
     landmarks = [pt(i) for i in range(21)]
 
     #only rotate if needed
-    if rotation_invariant:
+    if Rotation_Independent:
         landmarks = align_hand(landmarks)
 
     features = [] #used to store the features

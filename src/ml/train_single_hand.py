@@ -6,7 +6,7 @@ import joblib
 
 DATA_FILE = "gesture_data.csv"
 MODEL_OUT = "models/gesture_model.pkl"
-
+FEATURE_COLUMNS = "models/feature_columns.pkl"
 def main():
     # Load dataset
     df = pd.read_csv(DATA_FILE)
@@ -17,6 +17,10 @@ def main():
     # Split features and labels
     X = df.drop(columns=["label"])  # feature matrix
     y = df["label"]                 # labels
+
+    #save feature columns for later
+    feature_columns = X.columns.tolist()
+    joblib.dump(feature_columns, FEATURE_COLUMNS) #used later for precidts
 
     # Train / test split
     X_train, X_test, y_train, y_test = train_test_split(
