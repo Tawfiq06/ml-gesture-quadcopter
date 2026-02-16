@@ -20,7 +20,7 @@ ML_MODEL_PATH = "models/gesture_model.pkl"
 FEATURE_COLUMNS_PATH = "models/feature_columns.pkl"
 #current modes: IDLE, COUNTDOWN, RECORDING
 #drone modes:
-APP_MODE = "flight" # or "flight"
+APP_MODE = "train" # "train" or "flight"
 
 #open the gesture YAML
 try:
@@ -60,14 +60,17 @@ def main():
             frame = cam.read() #read the frame
             frame = cv2.flip(frame, 1) #mirror the image
             
-            gesture, hand_landmarks = recognizer.recognize(frame, timestamp_ms)
+            gestures, hands = recognizer.recognize(frame, timestamp_ms)
             timestamp_ms += int(1000/30)
 
-            # Put gesture label on frame to be displayed
-            if gesture:
-                cv2.putText(frame, gesture, (50,50), cv2.FONT_HERSHEY_SIMPLEX, 2, (0, 255, 0), 2)
+            # ---- DISPLAY GESTURES ----
+            if gestures:
+                for i, g in enumerate(gestures):
+                    if g:
+                        cv2.putText(frame, g, (50,50 + i*40), cv2.FONT_HERSHEY_SIMPLEX, 2, (0, 255, 0), 2)
 
             # ----  MODE HANDILING  ----
+
             # ---- Countdown
             if mode == "COUNTDOWN":
                 elapsed = (timestamp_ms - countdown_start_time) / 1000.0 #determine how many seconds have passed
@@ -99,11 +102,13 @@ def main():
                     2
                 )
 
-                if hand_landmarks is None:
+                if not hands:
                     print("Hand lost, stopping early")
                     mode = "IDLE"
                     recording_frames_left = 0
                 else:
+                    hand_landmarks = [0] # use first detected hand
+
                     cfg = gesture_config.get(current_label, {})
                     Rotation_Independent = cfg.get("Rotation_Independent", False)
 
@@ -119,6 +124,16 @@ def main():
                         mode = "IDLE"
                         print(f"Saved samples for '{current_label}'")
             
+            # ---- Flight Mode ----
+            if mode == "IDLE" and APP_MODE == "flight":
+                drone.tick(1/30)
+
+                if gestures:
+                    for g in gestures:
+                        if g:
+                            apply_gesture(g, gesture_config, drone)
+
+            # ---- Render ----
             if APP_MODE == "flight":
                 combined = render_side_panel(frame, drone)  #will add the side panel
                 cv2.imshow("Webcam", combined) #will show the frame
@@ -135,13 +150,8 @@ def main():
             if key == ord("p"):
                 print(drone)
 
-            # ---- IDLE ----
             if mode == "IDLE":
-                if APP_MODE == "flight":
-                    drone.tick(1/30) # since this is about 30 fps
-                    apply_gesture(gesture, gesture_config, drone)
 
-                # labels
                 if key == ord("1") and mode == "IDLE":
                     current_label = "UP"
                     last_label = current_label

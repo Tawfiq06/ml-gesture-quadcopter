@@ -50,7 +50,7 @@ class GestureRecognizer:
         options = HandLandmarkerOptions(
             base_options = BaseOptions(model_asset_path=model_path),
             running_mode = VisionRunningMode.VIDEO, #used for real-time frame by frame video
-            num_hands = 1 #detects 1 hand right now
+            num_hands = 2 #detects 2 hands now
         )
 
         self.landmarker = HandLandmarker.create_from_options(options) #loads the model
@@ -82,9 +82,13 @@ class GestureRecognizer:
         #sends the frame to the hand model
         result = self.landmarker.detect_for_video(mp_image, timestamp_ms)
 
-        if result.hand_landmarks: #if the hand is there
-            hand = result.hand_landmarks[0]
+        if not result.hand_landmarks:
+            return [], []
 
+        gestures = []
+        hands = result.hand_landmarks
+
+        for hand in hands:
             wrist = hand[0]      #wrist
             middle_mcp = hand[9] #base of middle finger
 
@@ -110,50 +114,49 @@ class GestureRecognizer:
                 bottom_right = (cx + half_size, cy + half_size)
                 cv2.rectangle(frame, top_left, bottom_right, (0, 0, 255), 2)
             
-            # ---- ML Recognitoon ----
-            #first get the features needed from the frame
-            features = extract_features(hand, Rotation_Independent=True)
+        # ---- ML Recognitoon ----
+        #first get the features needed from the frame
+        features = extract_features(hand, Rotation_Independent=True)
 
-            #need to convert a DataFrame with proper column names
-            X = pd.DataFrame([features], columns=self.feature_columns)
+        #need to convert a DataFrame with proper column names
+        X = pd.DataFrame([features], columns=self.feature_columns)
 
-            #predict probabilities
-            probs = self.model.predict_proba(X)[0] 
-            confidence = np.max(probs)
+        #predict probabilities
+        probs = self.model.predict_proba(X)[0] 
+        confidence = np.max(probs)
 
-            gesture = None
-            if confidence > 0.6: 
-                gesture = self.model.classes_[np.argmax(probs)]
+        gesture = None
+        if confidence > 0.6: 
+            gesture = self.model.classes_[np.argmax(probs)]
 
-            # ---- Hard Coded Recognition ---- 
-            '''
-            #example detection for now
-            wrist = hand[0]
-            index_tip = hand[8]
-            middle_tip = hand[12]
-            ring_tip = hand[16]
-            pinky_tip = hand[20]
-            gesture = None
+        gestures.append(gesture)
+        # ---- Hard Coded Recognition ---- 
+        '''
+        #example detection for now
+        wrist = hand[0]
+        index_tip = hand[8]
+        middle_tip = hand[12]
+        ring_tip = hand[16]
+        pinky_tip = hand[20]
+        gesture = None
 
-            THRESHOLD = 0.2 
-            #check which fingers are "up"
-            middle_up = middle_tip.y < wrist.y - THRESHOLD
-            index_up = index_tip.y < wrist.y - THRESHOLD
-            ring_up = ring_tip.y < wrist.y - THRESHOLD
-            pinky_up = pinky_tip.y < wrist.y - THRESHOLD
+        THRESHOLD = 0.2 
+        #check which fingers are "up"
+        middle_up = middle_tip.y < wrist.y - THRESHOLD
+        index_up = index_tip.y < wrist.y - THRESHOLD
+        ring_up = ring_tip.y < wrist.y - THRESHOLD
+        pinky_up = pinky_tip.y < wrist.y - THRESHOLD
 
-            if not index_up & ring_up & pinky_up:
-                if middle_up:
-                    gesture = GESTURE_MIDDLE
-                else:
-                    gesture = GESTURE_FIST
+        if not index_up & ring_up & pinky_up:
+            if middle_up:
+                gesture = GESTURE_MIDDLE
+            else:
+                gesture = GESTURE_FIST
 
-            elif middle_tip.y < wrist.y -0.1:
-                gesture =  GESTURE_UP
-            elif middle_tip.y > wrist.y + 0.1:
-                gesture =  GESTURE_DOWN
-            '''
+        elif middle_tip.y < wrist.y -0.1:
+            gesture =  GESTURE_UP
+        elif middle_tip.y > wrist.y + 0.1:
+            gesture =  GESTURE_DOWN
+        '''
 
-            return gesture, hand
-        
-        return None, None
+        return gestures, hands
