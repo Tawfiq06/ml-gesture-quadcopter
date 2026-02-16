@@ -7,11 +7,13 @@ DOWN:
   type: drone
 GUN:
   Rotation_Independent: false
+  type: system
+  action: land
 HALF_HEART:
   Rotation_Independent: false
 LEFT:
   action: yaw_left
-  delta: 0.1
+  delta: -0.1
   type: drone
 MIDDLE:
   Rotation_Independent: true
@@ -33,20 +35,25 @@ RIGHT:
 ROCK_AND_ROLL:
   Rotation_Independent: false
 STOP:
+  type: system
+  action: emergency
   Rotation_Independent: true
 THUMBS_DOWN:
   Rotation_Independent: true
-  action: yaw_left
-  delta: 0.1
+  action: decrease_thrust
+  delta: -1
   type: drone
 THUMBS_NEUTRAL:
   Rotation_Independent: false
 THUMBS_UP:
   Rotation_Independent: false
+  action: increase_thrust
+  delta: 1
+  type: drone
 THUMB_UP:
   Rotation_Independent: false
-  action: increase_altitude
-  delta: 0.1
+  action: increase_thrust
+  delta: 01
   type: drone
 UP:
   Rotation_Independent: false

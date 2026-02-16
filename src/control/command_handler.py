@@ -16,7 +16,7 @@ DRONE_ACTION_MAP = {
 
 }
 '''
-def apply_gesture(gesture, gesture_config, state):
+def apply_gesture(gesture, gesture_config, drone):
     global _last_command_time
     
     if gesture is None:
@@ -40,15 +40,15 @@ def apply_gesture(gesture, gesture_config, state):
     try:
         if cmd_type == "drone":
             action = DroneAction(action_str)
-            _apply_drone_command(action, cmd, state)
+            _apply_drone_command(action, cmd, drone)
 
         elif cmd_type == "system":
             action = SystemAction(action_str)
-            _apply_system_command(action, state)
+            _apply_system_command(action, drone)
 
         elif cmd_type == "ui":
             action = UIAction(action_str)
-            _apply_ui_command(action)
+            _apply_ui_command(action, drone)
 
         else:
             print(f"[WARN] Unknown commad type: {cmd_type}")
@@ -59,43 +59,45 @@ def apply_gesture(gesture, gesture_config, state):
         )
     _last_command_time = now
 
-def _apply_drone_command(action: DroneAction, cmd, state):
+def _apply_drone_command(action: DroneAction, cmd, drone):
     delta = cmd.get("delta", 0)
 
     #need to add checks if its in the correct mode
-    if state.mode != DroneMode.AIRBORNE:
+    if drone.mode != DroneMode.AIRBORNE:
         print(f"[REJECT] Drone not airborne - action '{action}' ignored")
         return
 
-    if action == DroneAction.INCREASE_ALTITUDE:
-        state.altitude += delta
+    if action == DroneAction.INCREASE_THRUST:
+        drone.thrust += delta
 
-    elif action == DroneAction.DECREASE_ALTITUDE:
-        state.altitude += delta  # delta can be negative
+    elif action == DroneAction.DECREASE_THRUST:
+        drone.thrust += delta  # delta can be negative
 
     elif action == DroneAction.YAW_LEFT:
-        state.yaw += delta
+        drone.yaw_rate += delta
 
     elif action == DroneAction.YAW_RIGHT:
-        state.yaw += delta
+        drone.yaw_rate += delta
 
-def _apply_system_command(action: SystemAction, state):
+def _apply_system_command(action: SystemAction, drone):
     if action == SystemAction.TAKEOFF:
         print("🚀 Takeoff")
-        state.takeoff()
+        drone.takeoff()
 
     elif action == SystemAction.LAND:
         print("🛬 Landing")
-        state.land()
+        drone.land()
 
     elif action == SystemAction.EMERGENCY:
         print("🚨 Emergency stop")
-        state.emergency()
+        drone.emergency()
     
     elif action == SystemAction.ARM:
         print("Arming....")
-        state.arm()
+        drone.arm()
 
-def _apply_ui_command(action):
-    if action == "take_photo":
+def _apply_ui_command(action, drone):
+    if action == UIAction.PHOTO:
         print("📸 Photo Taken")
+    if action == UIAction.PRINT:
+        print(drone)

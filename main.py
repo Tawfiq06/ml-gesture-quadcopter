@@ -6,8 +6,8 @@ from src.gestures.features import extract_features
 from src.gestures.dataset import save_features, save_raw_landmarks
 from src.control.command_handler import apply_gesture
 from src.control.drone_state import DroneState, DroneMode
-
-# ---- SET UP ----
+from src.ui.side_panel import render_side_panel
+# ---- SET-UP ----
 
 #Recording Settings
 RECORD_FRAMES = 120
@@ -35,7 +35,7 @@ def main():
 
     cam = Webcam()
     recognizer = GestureRecognizer(MODEL_PATH, ML_MODEL_PATH)
-    state = DroneState()
+    drone = DroneState()
 
     timestamp_ms = 0
     
@@ -48,8 +48,9 @@ def main():
     
     #Print Keys
     print("Keys:")
-    print(" L = new label")
-    print(" R = reuse last label")
+    print(" l = new label")
+    print(" r = reuse last label")
+    print(" p = print drone stats")
     print(" q = quit")
     print(" 1 = UP")
     print(" 2 = DOWN")
@@ -117,8 +118,12 @@ def main():
                     if recording_frames_left == 0:
                         mode = "IDLE"
                         print(f"Saved samples for '{current_label}'")
-
-            cv2.imshow("Webcam", frame) #will show the frame
+            
+            if APP_MODE == "flight":
+                combined = render_side_panel(frame, drone)  #will add the side panel
+                cv2.imshow("Webcam", combined) #will show the frame
+            else:
+                cv2.imshow("Webcam", frame) #if you just want the camera
 
             # --- Handle Inputs ---
 
@@ -127,10 +132,14 @@ def main():
             if key == ord("q"):
                 break
             
+            if key == ord("p"):
+                print(drone)
+
             # ---- IDLE ----
             if mode == "IDLE":
                 if APP_MODE == "flight":
-                    apply_gesture(gesture, gesture_config, state)
+                    drone.tick(1/30) # since this is about 30 fps
+                    apply_gesture(gesture, gesture_config, drone)
 
                 # labels
                 if key == ord("1") and mode == "IDLE":
@@ -146,7 +155,7 @@ def main():
                     countdown_start_time = timestamp_ms
 
                 #New Label
-                elif key == ord("L") and mode == "IDLE": #user added label for the gesture
+                elif key == ord("l") and mode == "IDLE": #user added label for the gesture
                     current_label = input("Enter gesture label: ").strip() #remove leading/trailing spaces
                     if current_label == "":
                         print("Label cannot be empty")
@@ -167,7 +176,7 @@ def main():
                         countdown_start_time = timestamp_ms
 
                 #used the last used label
-                elif key == ord("R") and mode == "IDLE":
+                elif key == ord("r") and mode == "IDLE":
                     if last_label is None:
                         print("No previous label to resue") 
                     else:
@@ -175,17 +184,18 @@ def main():
                         mode = "COUNTDOWN"
                         countdown_start_time = timestamp_ms
                         print(f"Reusing label: {current_label}")
+
     finally: #if program fails
         cam.release()
         cv2.destroyAllWindows()
 
         #Emergency Landing
         #need to land the drone if we quit before landing it
-        if APP_MODE == "flight" and state.mode == DroneMode.AIRBORNE:
+        if APP_MODE == "flight" and drone.mode == DroneMode.AIRBORNE:
             print("⚠️ Program exiting while airborne, triggering emergency landing")
-            state.emergency()
+            drone.emergency()
 
-        print(state)
+        print(drone)
         
 if __name__ == "__main__":
     main()
