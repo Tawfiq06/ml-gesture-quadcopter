@@ -24,7 +24,6 @@ GESTURE_DOWN = "DOWN"
 GESTURE_MIDDLE = "MIDDLE" 
 GESTURE_FIST = "FIST"
 
-
 FINGER_TIPS = [0, 4, 8, 12, 16, 20] #wrist + all finger tips
 
 #Shape scales
@@ -34,6 +33,10 @@ SQUARE_SCALE = 0.08
 #ml model
 ml_model_path = "models/gesture_model.pkl"
 
+feature_columns_path = "models/feature_columns.pkl" 
+csv_path = "gesture_data.csv"
+two_features_path = "models/two_hand_feature_columns.pkl"
+
 def distance_px(lm1, lm2, frame_shape):
     h, w, _ = frame_shape
     x1, y1 = int(lm1.x * w), int(lm1.y * h)
@@ -42,7 +45,7 @@ def distance_px(lm1, lm2, frame_shape):
     
 class GestureRecognizer:
     #constructor
-    def __init__(self, model_path: str, ml_model_path: str, feature_columns_path: str = "models/feature_columns.pkl", csv_path: str = "gesture_data.csv"):
+    def __init__(self, model_path: str, ml_model_path: str, feature_columns_path: str, csv_path: str, two_features_path: str, two_hand_model_path: str):
         #model_path is the path to MediaPipes hand model
         #csv_path is where I want to store the gesture landmarks
 
@@ -55,11 +58,13 @@ class GestureRecognizer:
 
         self.landmarker = HandLandmarker.create_from_options(options) #loads the model
         self.model = joblib.load(ml_model_path)
+        self.two_hand_model = joblib.load(two_hand_model_path)
         self.csv_path = csv_path #sets the csv path
 
         #load feature colums saved during training
         self.feature_columns = joblib.load(feature_columns_path)
-        
+        self.two_hand_feature_columns = joblib.load(two_features_path)
+
         # Prepare the CSV file
         try: #check if file exists
             with open(self.csv_path, "x", newline="") as f:
@@ -73,7 +78,7 @@ class GestureRecognizer:
         except FileExistsError:
             pass #the the already exists
 
-    def recognize(self, frame, timestamp_ms: int):
+    def recognize(self, frame, timestamp_ms: int, mode="both"):
         #need to convert from OpenCV BGR to RGB
         rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_frame)
@@ -82,12 +87,13 @@ class GestureRecognizer:
         #sends the frame to the hand model
         result = self.landmarker.detect_for_video(mp_image, timestamp_ms)
 
-        if not result.hand_landmarks:
-            return [], []
-
         gestures = []
-        hands = result.hand_landmarks
+        hands = result.hand_landmarks or []
 
+        single_hand_gestures = []
+        two_hand_gesture = None
+
+        # ---- Draw Landmarks on Frame ---- 
         for hand in hands:
             wrist = hand[0]      #wrist
             middle_mcp = hand[9] #base of middle finger
@@ -95,7 +101,7 @@ class GestureRecognizer:
             # find the palm size (used to determine how the size of drawn landmarks)
             palm_size = distance_px(wrist, middle_mcp, frame.shape)
 
-            # ---- Draw Landmarks on Frame ---- 
+            
             # circles on everything
             for lm in hand:
                 h, w, _ = frame.shape
@@ -113,50 +119,85 @@ class GestureRecognizer:
                 top_left = (cx -half_size, cy - half_size)
                 bottom_right = (cx + half_size, cy + half_size)
                 cv2.rectangle(frame, top_left, bottom_right, (0, 0, 255), 2)
+         
+        # ---- Run Models ----
+        if mode in ["two", "both"]:
+            two_hand_gesture = self.detect_two_hand_gesture(hands)
+        
+        if mode in ["single", "both"]:
+            single_hand_gestures = self.detect_single_hand_gesture(hands)
+
+        # ---- Decide What to Return ---- 
+        if mode == "single":
+            return single_hand_gestures, hands
+        
+        elif mode == "two":
+            return [two_hand_gesture] if two_hand_gesture else [], hands
+        
+        elif mode == "both":
+            if two_hand_gesture: #give two hands higher priority
+                return [two_hand_gesture], hands
+            else:
+                return single_hand_gestures, hands
             
-        # ---- ML Recognitoon ----
-        #first get the features needed from the frame
-        features = extract_features(hand, Rotation_Independent=True)
+        return gestures, hands
+    
+    def _sort_hands_left_right(self, hands):
+        return sorted(hands, key=lambda h: h[0].x)
+    
+    def _hand_centre(self, hand):
+        xs = [lm.x for lm in hand]
+        ys = [lm.y for lm in hand]
+        return np.mean(xs), np.mean(ys)
 
-        #need to convert a DataFrame with proper column names
-        X = pd.DataFrame([features], columns=self.feature_columns)
+    def _distance_between_hands(self, hand1, hand2):
+        x1, y1 = self._hand_centre(hand1)
+        x2, y2 = self._hand_centre(hand2)
+        return np.sqrt((x2-x1)**2 + (y2 - y1)**2)
 
-        #predict probabilities
-        probs = self.model.predict_proba(X)[0] 
+    def detect_single_hand_gesture(self, hands):
+        #Only process the first detect hand
+        single_hand_gestures = []
+
+        for hand in hands:
+         #first get the features needed from the frame
+            features = extract_features(hand, Rotation_Independent=True)
+
+            #need to convert a DataFrame with proper column names
+            X = pd.DataFrame([features], columns=self.feature_columns)
+
+            #predict probabilities
+            probs = self.model.predict_proba(X)[0] 
+            confidence = np.max(probs)
+
+            gesture = None
+            if confidence > 0.6: 
+                gesture = self.model.classes_[np.argmax(probs)]
+
+            single_hand_gestures.append(gesture)
+        return single_hand_gestures
+
+    def detect_two_hand_gesture(self, hands):
+        #must have two hands
+        if len(hands) != 2:
+            return None
+        
+        #need to make sure hands are ordered properly or it could mess up model
+        hands = self._sort_hands_left_right(hands)
+        left, right = hands
+
+        features_left = extract_features(left, Rotation_Independent=True)
+        features_right = extract_features(right, Rotation_Independent=True)
+
+        combined_features = np.concatenate([features_left, features_right])
+
+        X = pd.DataFrame([combined_features], columns=self.two_hand_feature_columns)
+
+        probs = self.two_hand_model.predict_proba(X)[0]
         confidence = np.max(probs)
 
-        gesture = None
-        if confidence > 0.6: 
-            gesture = self.model.classes_[np.argmax(probs)]
-
-        gestures.append(gesture)
-        # ---- Hard Coded Recognition ---- 
-        '''
-        #example detection for now
-        wrist = hand[0]
-        index_tip = hand[8]
-        middle_tip = hand[12]
-        ring_tip = hand[16]
-        pinky_tip = hand[20]
-        gesture = None
-
-        THRESHOLD = 0.2 
-        #check which fingers are "up"
-        middle_up = middle_tip.y < wrist.y - THRESHOLD
-        index_up = index_tip.y < wrist.y - THRESHOLD
-        ring_up = ring_tip.y < wrist.y - THRESHOLD
-        pinky_up = pinky_tip.y < wrist.y - THRESHOLD
-
-        if not index_up & ring_up & pinky_up:
-            if middle_up:
-                gesture = GESTURE_MIDDLE
-            else:
-                gesture = GESTURE_FIST
-
-        elif middle_tip.y < wrist.y -0.1:
-            gesture =  GESTURE_UP
-        elif middle_tip.y > wrist.y + 0.1:
-            gesture =  GESTURE_DOWN
-        '''
-
-        return gestures, hands
+        two_hand_gesture = None
+        if confidence > 0.7:
+           two_hand_gesture = self.two_hand_model.classes_[np.argmax(probs)]
+        
+        return two_hand_gesture

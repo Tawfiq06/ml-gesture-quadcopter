@@ -6,7 +6,7 @@ from src.gestures.features import extract_features
 from src.gestures.dataset import save_features, save_raw_landmarks
 from src.control.command_handler import apply_gesture
 from src.control.drone_state import DroneState, DroneMode
-from src.ui.side_panel import render_side_panel
+from src.ui.side_panel import render_drone_panel, render_gesture_panel
 # ---- SET-UP ----
 
 #Recording Settings
@@ -17,7 +17,10 @@ COUNTDOWN_SECONDS = 3
 CONFIG_PATH = "config/gestures.yaml"
 MODEL_PATH = "models/hand_landmarker.task"
 ML_MODEL_PATH = "models/gesture_model.pkl"
+TWO_HAND_MODEL_PATH = "models/two_hand_model.pkl"
 FEATURE_COLUMNS_PATH = "models/feature_columns.pkl"
+TWO_FEATURES_PATH = "models/two_hand_feature_columns.pkl"
+CSV_PATH = "gesture_data.csv"
 #current modes: IDLE, COUNTDOWN, RECORDING
 #drone modes:
 APP_MODE = "train" # "train" or "flight"
@@ -34,7 +37,7 @@ def main():
     print("Program started")
 
     cam = Webcam()
-    recognizer = GestureRecognizer(MODEL_PATH, ML_MODEL_PATH)
+    recognizer = GestureRecognizer(MODEL_PATH, ML_MODEL_PATH, FEATURE_COLUMNS_PATH, CSV_PATH, TWO_FEATURES_PATH ,TWO_HAND_MODEL_PATH)
     drone = DroneState()
 
     timestamp_ms = 0
@@ -62,13 +65,7 @@ def main():
             
             gestures, hands = recognizer.recognize(frame, timestamp_ms)
             timestamp_ms += int(1000/30)
-
-            # ---- DISPLAY GESTURES ----
-            if gestures:
-                for i, g in enumerate(gestures):
-                    if g:
-                        cv2.putText(frame, g, (50,50 + i*40), cv2.FONT_HERSHEY_SIMPLEX, 2, (0, 255, 0), 2)
-
+        
             # ----  MODE HANDILING  ----
 
             # ---- Countdown
@@ -135,10 +132,13 @@ def main():
 
             # ---- Render ----
             if APP_MODE == "flight":
-                combined = render_side_panel(frame, drone)  #will add the side panel
+                combined = render_drone_panel(frame, drone)  #will add the side panel
                 cv2.imshow("Webcam", combined) #will show the frame
             else:
-                cv2.imshow("Webcam", frame) #if you just want the camera
+                if not gestures:
+                    gestures = ["None", "None"]
+                combined = render_gesture_panel(frame, gestures)
+                cv2.imshow("Webcam", combined) #if you just want the camera
 
             # --- Handle Inputs ---
 
